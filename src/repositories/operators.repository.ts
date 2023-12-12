@@ -101,7 +101,7 @@ export class OperatorsRepository
       operatorDto.id = operator.id;
       operatorDto.name = operator.name;
 
-      operator.Customer.map((customer) => {
+      operatorDto.customers = operator.Customer.map((customer) => {
         const customerDto = new FindCustomerDto();
         customerDto.id = customer.id;
         customerDto.name = customer.name;
