@@ -4,4 +4,5 @@ export class FindCustomerDto {
   birth: string;
   value: number;
   email: string;
+  operatorId: string;
 }
