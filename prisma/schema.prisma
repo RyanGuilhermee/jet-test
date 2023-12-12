@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Operator {
+  id       String     @id @default(uuid())
+  name     String     @unique
+  Customer Customer[]
+
+  @@map("operators")
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  birth       String
+  value       String
+  email       String   @unique
+  operator    Operator @relation(fields: [operator_id], references: [id])
+  operator_id String
+
+  @@map("customers")
+}
