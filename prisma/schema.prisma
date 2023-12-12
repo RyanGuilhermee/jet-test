@@ -19,7 +19,7 @@ model Customer {
   id          String   @id @default(uuid())
   name        String   @unique
   birth       String
-  value       String
+  value       Decimal
   email       String   @unique
   operator    Operator @relation(fields: [operator_id], references: [id])
   operator_id String
