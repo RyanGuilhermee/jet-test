@@ -62,6 +62,7 @@ export class OperatorsRepository
   async findOne(id: string): Promise<FindOperatorDto | null> {
     const operator = await this.operator.findFirst({
       where: { id },
+      include: { Customer: true },
     });
 
     if (!operator) {
@@ -71,6 +72,17 @@ export class OperatorsRepository
     const operatorDto = new FindOperatorDto();
     operatorDto.id = operator.id;
     operatorDto.name = operator.name;
+
+    operatorDto.customers = operator.Customer.map((customer) => {
+      const customerDto = new FindCustomerDto();
+      customerDto.id = customer.id;
+      customerDto.name = customer.name;
+      customerDto.birth = customer.birth;
+      customerDto.value = Number(customer.value);
+      customerDto.email = customer.email;
+
+      return customerDto;
+    });
 
     return operatorDto;
   }
