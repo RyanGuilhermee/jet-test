@@ -16,7 +16,7 @@ export class OperatorsService implements IOperatorsRepository {
   constructor(private operatorsRepository: OperatorsRepository) {}
 
   async create(createOperatorDto: CreateOperatorDto) {
-    const operator = this.findOneByName(createOperatorDto.name);
+    const operator = await this.findOneByName(createOperatorDto.name);
 
     if (operator) {
       throw new ConflictException('Operator name already exists');
@@ -46,7 +46,7 @@ export class OperatorsService implements IOperatorsRepository {
   async update(id: string, updateOperatorDto: UpdateOperatorDto) {
     await this.findOne(id);
 
-    const operator = this.findOneByName(updateOperatorDto.name);
+    const operator = await this.findOneByName(updateOperatorDto.name);
 
     if (operator) {
       throw new ConflictException('Operator name already exists');

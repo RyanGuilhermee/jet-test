@@ -39,7 +39,12 @@ export class OperatorsController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.operatorsService.remove(id);
+  async remove(@Param('id') id: string) {
+    const message = await this.operatorsService.remove(id);
+
+    return {
+      statusCode: 200,
+      message,
+    };
   }
 }
