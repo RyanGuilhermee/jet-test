@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 
 export interface ICustomersRepository {
-  create(createCustomerDto: CreateCustomerDto): Promise<FindCustomerDto>;
+  create(createCustomerDto: CreateCustomerDto[]): Promise<string>;
 
   update(
     id: string,
@@ -26,26 +26,22 @@ export class CustomersRepository
   extends PrismaClient
   implements ICustomersRepository
 {
-  async create(createCustomerDto: CreateCustomerDto): Promise<FindCustomerDto> {
-    const customer = await this.customer.create({
-      data: {
-        name: createCustomerDto.name,
-        birth: createCustomerDto.birth,
-        value: createCustomerDto.value,
-        email: createCustomerDto.email,
-        operator_id: createCustomerDto.operatorId,
-      },
+  async create(createCustomerDto: CreateCustomerDto[]): Promise<string> {
+    const createCustomers = createCustomerDto.map((customer) => {
+      return {
+        name: customer.name,
+        birth: customer.birth,
+        value: customer.value,
+        email: customer.email,
+        operator_id: customer.operatorId,
+      };
     });
 
-    const customerDto = new FindCustomerDto();
-    customerDto.id = customer.id;
-    customerDto.name = customer.name;
-    customerDto.birth = customer.birth;
-    customerDto.value = Number(customer.value);
-    customerDto.email = customer.email;
-    customerDto.operatorId = customer.operator_id;
+    await this.customer.createMany({
+      data: createCustomers,
+    });
 
-    return customerDto;
+    return 'Customers successfully created';
   }
 
   async update(
