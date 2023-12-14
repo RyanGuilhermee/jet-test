@@ -19,6 +19,8 @@ export interface ICustomersRepository {
   findAll(): Promise<FindCustomerDto[]>;
 
   remove(id: string): Promise<string>;
+
+  removeAll(): Promise<string>;
 }
 
 @Injectable()
@@ -129,10 +131,16 @@ export class CustomersRepository
   }
 
   async remove(id: string): Promise<string> {
-    await this.customer.delete({
+    await this.customer.deleteMany({
       where: { id },
     });
 
     return 'Customer successfully removed';
+  }
+
+  async removeAll(): Promise<string> {
+    await this.customer.deleteMany();
+
+    return 'All Customers successfully removed';
   }
 }
