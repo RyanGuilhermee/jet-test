@@ -10,7 +10,6 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { CustomersService } from './customers.service';
-// import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -30,8 +29,13 @@ export class CustomersController {
       }),
     }),
   )
-  create(@UploadedFile() file: Express.Multer.File) {
-    return this.customersService.validateData(file);
+  async create(@UploadedFile() file: Express.Multer.File) {
+    const message = await this.customersService.validateData(file);
+
+    return {
+      statusCode: 201,
+      message,
+    };
   }
 
   @Get()

@@ -1,20 +1,32 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  forwardRef,
+} from '@nestjs/common';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import {
   CustomersRepository,
   ICustomersRepository,
 } from '../repositories/customers.repository';
+import { OperatorsService } from '../operators/operators.service';
 import * as csv from 'fast-csv';
 import * as fs from 'fs';
+import { FindOperatorDto } from '../operators/dto/find-operator.dto';
 
 @Injectable()
 export class CustomersService implements ICustomersRepository {
-  constructor(private customersRepository: CustomersRepository) {}
+  constructor(
+    @Inject(forwardRef(() => OperatorsService))
+    private operatorsService: OperatorsService,
+    private customersRepository: CustomersRepository,
+  ) {}
 
-  private processFile(file: Express.Multer.File) {
+  private processFile(file: Express.Multer.File): Promise<CreateCustomerDto[]> {
     return new Promise((resolve, reject) => {
-      const csvData = [];
+      const csvData: CreateCustomerDto[] = [];
       let headersValidated = false;
 
       fs.createReadStream(file.path)
@@ -48,7 +60,14 @@ export class CustomersService implements ICustomersRepository {
             headersValidated = true;
           }
 
-          csvData.push(row);
+          const customerDto = new CreateCustomerDto();
+          customerDto.name = row.nome;
+          customerDto.birth = row.nascimento;
+          customerDto.value = row.valor;
+          customerDto.email = row['email '].trim();
+          customerDto.operatorId = '';
+
+          csvData.push(customerDto);
         })
         .on('end', () => {
           this.removeFile(file.path);
@@ -87,17 +106,129 @@ export class CustomersService implements ICustomersRepository {
     return true;
   }
 
-  async validateData(file: Express.Multer.File) {
-    try {
-      const data = await this.processFile(file);
+  distributesCustomers(
+    customersData: CreateCustomerDto[],
+    operators: FindOperatorDto[],
+  ) {
+    let indexOperator = 0;
 
-      return data;
-    } catch (error) {
-      throw new BadRequestException(error.message);
+    for (const i in customersData) {
+      customersData[i].operatorId = operators[indexOperator].id;
+
+      indexOperator++;
+
+      indexOperator = indexOperator > operators.length - 1 ? 0 : indexOperator;
+    }
+
+    return customersData;
+  }
+
+  redistributesWhenInsertingCustomers(
+    customersData: CreateCustomerDto[],
+    operators: FindOperatorDto[],
+  ) {
+    const newCostumers: CreateCustomerDto[] = [];
+    let indexOperator = 0;
+    let actualCustomersQuantity = 0;
+    let successorCustomersQuantity = 0;
+
+    while (customersData.length) {
+      if (
+        (indexOperator === 0 &&
+          actualCustomersQuantity ===
+            operators[indexOperator].customers.length) ||
+        operators.length === 1
+      ) {
+        let indxOperator = 0;
+
+        for (const i in customersData) {
+          customersData[i].operatorId = operators[indxOperator].id;
+
+          newCostumers.push(customersData[i]);
+
+          indxOperator++;
+
+          indxOperator = indxOperator > operators.length - 1 ? 0 : indxOperator;
+        }
+
+        return newCostumers;
+      }
+
+      if (actualCustomersQuantity === 0) {
+        // armazena a quantidade de clientes do atual operador
+        actualCustomersQuantity = operators[indexOperator].customers.length;
+      }
+
+      // armazena a quantidade de clientes do operador sucessor
+      successorCustomersQuantity =
+        operators[indexOperator + 1].customers.length;
+
+      // verifica se o operador atual tem mais clientes que o sucessor
+      if (actualCustomersQuantity > successorCustomersQuantity) {
+        // atribui o primeiro cliente da lista ao sucessor
+        const firstCustomer = customersData.shift();
+        firstCustomer.operatorId = operators[indexOperator + 1].id;
+
+        newCostumers.push(firstCustomer);
+        actualCustomersQuantity = successorCustomersQuantity + 1;
+      }
+
+      indexOperator++;
+
+      indexOperator =
+        indexOperator === operators.length - 1 ? 0 : indexOperator;
+    }
+
+    return newCostumers;
+  }
+
+  async validateExistingCustomers(customersData: CreateCustomerDto[]) {
+    for await (const customer of customersData) {
+      const customerExists = await this.findOneByEmail(customer.email);
+
+      if (customerExists) {
+        throw new ConflictException('Customer already exists');
+      }
     }
   }
 
-  create(createCustomerDto: CreateCustomerDto) {
+  async validateData(file: Express.Multer.File) {
+    const operators = await this.operatorsService.findAll();
+
+    if (!operators.length) {
+      this.removeFile(file.path);
+
+      throw new BadRequestException(
+        'No operator registered. Register an operator before adding customers',
+      );
+    }
+
+    let customersData: CreateCustomerDto[];
+
+    try {
+      customersData = await this.processFile(file);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    const hasCustomers = operators[0].customers.length;
+    let responseData: CreateCustomerDto[];
+
+    if (!hasCustomers) {
+      responseData = this.distributesCustomers(customersData, operators);
+    } else {
+      await this.validateExistingCustomers(customersData);
+
+      responseData = this.redistributesWhenInsertingCustomers(
+        customersData,
+        operators,
+      );
+    }
+
+    return this.create(responseData);
+  }
+
+  create(createCustomerDto: CreateCustomerDto[]) {
     return this.customersRepository.create(createCustomerDto);
   }
 
@@ -119,5 +250,9 @@ export class CustomersService implements ICustomersRepository {
 
   remove(id: string) {
     return this.customersRepository.remove(id);
+  }
+
+  removeAll(): Promise<string> {
+    return this.customersRepository.removeAll();
   }
 }
