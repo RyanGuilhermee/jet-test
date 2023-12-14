@@ -1,19 +1,26 @@
 import {
-  BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { CreateOperatorDto } from './dto/create-operator.dto';
+import { CreateCustomerDto } from '../customers/dto/create-customer.dto';
 import { UpdateOperatorDto } from './dto/update-operator.dto';
 import {
   IOperatorsRepository,
   OperatorsRepository,
 } from '../repositories/operators.repository';
+import { CustomersService } from '../customers/customers.service';
 
 @Injectable()
 export class OperatorsService implements IOperatorsRepository {
-  constructor(private operatorsRepository: OperatorsRepository) {}
+  constructor(
+    @Inject(forwardRef(() => CustomersService))
+    private customersService: CustomersService,
+    private operatorsRepository: OperatorsRepository,
+  ) {}
 
   async create(createOperatorDto: CreateOperatorDto) {
     const operator = await this.findOneByName(createOperatorDto.name);
@@ -22,7 +29,41 @@ export class OperatorsService implements IOperatorsRepository {
       throw new ConflictException('Operator name already exists');
     }
 
-    return this.operatorsRepository.create(createOperatorDto);
+    const message = await this.operatorsRepository.create(createOperatorDto);
+
+    this.redistributesWhenInsertingOperators();
+
+    return message;
+  }
+
+  async redistributesWhenInsertingOperators() {
+    const operators = await this.findAll();
+
+    if (!(operators.length > 1)) {
+      return;
+    }
+
+    const customers = await this.customersService.findAll();
+
+    const newCustomers = customers.map((customer) => {
+      const createCustomerDto = new CreateCustomerDto();
+      createCustomerDto.name = customer.name;
+      createCustomerDto.birth = customer.birth;
+      createCustomerDto.value = customer.value;
+      createCustomerDto.email = customer.email;
+      createCustomerDto.operatorId = '';
+
+      return createCustomerDto;
+    });
+
+    this.customersService.removeAll();
+
+    const distributedCustomers = this.customersService.distributesCustomers(
+      newCustomers,
+      operators,
+    );
+
+    this.customersService.create(distributedCustomers);
   }
 
   findAll() {
@@ -58,12 +99,24 @@ export class OperatorsService implements IOperatorsRepository {
   async remove(id: string) {
     const operator = await this.findOne(id);
 
-    if (operator.customers.length) {
-      throw new BadRequestException(
-        'Unable to remove the operator because there are currently active customers',
-      );
+    for await (const customer of operator.customers) {
+      await this.customersService.remove(customer.id);
     }
 
-    return this.operatorsRepository.remove(id);
+    const message = await this.operatorsRepository.remove(id);
+
+    const operators = await this.findAll();
+
+    if (operators.length > 1) {
+      const redistributedCustomers =
+        this.customersService.redistributesWhenInsertingCustomers(
+          operator.customers,
+          operators,
+        );
+
+      this.customersService.create(redistributedCustomers);
+    }
+
+    return message;
   }
 }
